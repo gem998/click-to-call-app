@@ -2,74 +2,72 @@ package com.company.clicktocall
 
 import android.app.Activity
 import android.content.Intent
-import android.net.Uri
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Bundle
+import android.view.Gravity
+import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.net.ServerSocket
-import java.net.Socket
-import kotlin.concurrent.thread
+import android.graphics.Color
+import android.graphics.Typeface
 
 class MainActivity : Activity() {
-
-    private var serverSocket: ServerSocket? = null
-    private lateinit var statusTextView: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        statusTextView = TextView(this).apply {
-            textSize = 18f
+        // 1. Create the main layout container
+        val mainLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
             setPadding(50, 50, 50, 50)
+            setBackgroundColor(Color.parseColor("#FFFFFF")) 
         }
-        setContentView(statusTextView)
 
+        // 2. IP Address Text (Top)
         val ipAddress = getWifiIPAddress()
-        statusTextView.text = "Click to Call Status: RUNNING\n\nEnter this IP address in Chrome Extension settings:\n\n$ipAddress\n\n(Keep your phone connected to the same Wi-Fi network)"
-
-        startHttpServer()
-    }
-
-    private fun startHttpServer() {
-        thread {
-            try {
-                serverSocket = ServerSocket(8080)
-                while (true) {
-                    val socket = serverSocket?.accept() ?: break
-                    handleClientSocket(socket)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
+        val statusText = TextView(this).apply {
+            text = "Click to Call is Running!\n\nChrome IP Address:\n\n$ipAddress\n\nYou can safely minimize this app."
+            textSize = 18f
+            gravity = Gravity.CENTER
+            setTextColor(Color.parseColor("#333333"))
         }
-    }
 
-    private fun handleClientSocket(socket: Socket) {
-        thread {
-            try {
-                val reader = BufferedReader(InputStreamReader(socket.inputStream))
-                val firstLine = reader.readLine() ?: ""
-                
-                if (firstLine.contains("/dial?number=")) {
-                    val number = firstLine.substringAfter("/dial?number=").substringBefore(" ")
-                    
-                    runOnUiThread {
-                        val intent = Intent(Intent.ACTION_DIAL).apply {
-                            data = Uri.parse("tel:$number")
-                        }
-                        startActivity(intent)
-                    }
-                }
-
-                val output = socket.getOutputStream()
-                output.write("HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: 2\r\n\r\nOK".toByteArray())
-                output.flush()
-                socket.close()
-            } catch (e: Exception) {
-                e.printStackTrace()
+        // 3. Logo Image (Middle)
+        val logoImage = ImageView(this).apply {
+            setImageResource(R.drawable.logo) 
+            val params = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(0, 80, 0, 20) // Spacing above and below the logo
             }
+            layoutParams = params
+        }
+
+        // 4. Tagline Text (Bottom)
+        val poweredByText = TextView(this).apply {
+            text = "This app is powered by\nNirdesh Technology PVT LTD"
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.parseColor("#555555"))
+        }
+
+        // Add them in the exact order requested
+        mainLayout.addView(statusText)
+        mainLayout.addView(logoImage)
+        mainLayout.addView(poweredByText)
+
+        setContentView(mainLayout)
+
+        // Start the background engine so it works when minimized
+        val serviceIntent = Intent(this, CallServerService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
         }
     }
 
@@ -77,10 +75,5 @@ class MainActivity : Activity() {
         val wifiManager = applicationContext.getSystemService(WIFI_SERVICE) as WifiManager
         val ipAddress = wifiManager.connectionInfo.ipAddress
         return String.format("%d.%d.%d.%d", (ipAddress and 0xff), (ipAddress shr 8 and 0xff), (ipAddress shr 16 and 0xff), (ipAddress shr 24 and 0xff))
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        try { serverSocket?.close() } catch (e: Exception) {}
     }
 }
